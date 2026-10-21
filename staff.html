@@ -1,0 +1,133 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>North Devon Wake Park Staff</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f5f6;color:#141414}
+.head{background:#64b6a2;color:white;padding:16px 20px;font-size:20px;font-weight:800}
+.head small{display:block;font-size:12px;font-weight:400;opacity:.9}
+main{max-width:640px;margin:0 auto;padding:16px}
+.card{background:white;border:1px solid #e3e4e6;border-radius:12px;padding:16px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 12px}
+label{display:block;font-size:12px;font-weight:700;color:#6b6f73;margin:12px 0 6px}
+input,select{width:100%;font-size:16px;padding:10px;border:1px solid #cfd2d6;border-radius:8px;background:white}
+.choices{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.choices button{font-size:15px;padding:12px;border:2px solid #cfd2d6;border-radius:8px;background:white;cursor:pointer}
+.choices button.on{border-color:#4b818b;background:#e6f1ef;font-weight:700}
+.primary{width:100%;margin-top:16px;font-size:17px;font-weight:700;padding:14px;border:0;border-radius:10px;background:#b03a2e;color:white;cursor:pointer}
+.primary.delayed{background:#d8991f;color:#141414}
+.primary:disabled{opacity:.5}
+.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #edeef0}
+.row:first-of-type{border-top:0}
+.row div{flex:1;font-size:13px}
+.row b{display:block;font-size:14px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;color:white;background:#b03a2e;margin-right:4px}
+.tag.delayed{background:#d8991f;color:#141414}
+.reopen{font-size:14px;padding:10px 14px;border:0;border-radius:8px;background:#64b6a2;color:white;font-weight:700;cursor:pointer}
+.muted{color:#6b6f73;font-size:13px}
+.msg{font-size:13px;margin-top:10px;font-weight:700}
+.msg.err{color:#b03a2e}.msg.ok{color:#4b818b}
+[hidden]{display:none!important}
+</style></head><body>
+<div class="head">NORTH DEVON WAKE PARK<small>STAFF • CLOSURES AND DELAYS</small></div>
+<main>
+  <section class="card" id="login">
+    <h2>Staff sign in</h2>
+    <label for="workerUrl">Kiosk server address</label>
+    <input id="workerUrl" type="url" placeholder="https://your-worker.workers.dev" autocomplete="off">
+    <label for="pin">Staff PIN</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+    <button class="primary" id="signIn" style="background:#4b818b">Sign in</button>
+    <div class="msg" id="loginMsg"></div>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card">
+      <h2>Showing on the kiosk now</h2>
+      <div id="current"><p class="muted">Loading…</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Close or delay an activity</h2>
+      <label for="activity">Activity</label>
+      <select id="activity"></select>
+      <label>Status</label>
+      <div class="choices" id="status">
+        <button data-v="closed" class="on">⛔ Closed</button>
+        <button data-v="delayed">⏳ Delayed</button>
+      </div>
+      <label>Reason</label>
+      <div class="choices" id="reason">
+        <button data-v="wind" class="on">💨 High wind</button>
+        <button data-v="lightning">⚡ Lightning</button>
+        <button data-v="water-quality">💧 Water quality</button>
+        <button data-v="other">Other</button>
+      </div>
+      <label for="note">Note for customers (optional)</label>
+      <input id="note" maxlength="140" placeholder="e.g. Checking again at 2pm">
+      <label for="until">Expected back at (optional)</label>
+      <input id="until" type="time">
+      <label for="setBy">Your name</label>
+      <input id="setBy" maxlength="40" autocomplete="off">
+      <button class="primary" id="submit">Show on kiosk</button>
+      <div class="msg" id="formMsg"></div>
+    </section>
+    <p class="muted">Notices clear automatically after 18 hours. Press Reopen to clear one sooner.</p>
+  </div>
+</main>
+<script>(function(){
+const ACTIVITIES=['ALL','FULL SIZE CABLE','TOP LAKE','AQUA PARK','JUNIOR AQUA PARK','PADDLEBOARDING','SAUNA & DIP'];
+const REASONS={'wind':'High wind','lightning':'Lightning','water-quality':'Water quality','other':'Operational'};
+const $=id=>document.getElementById(id);
+function store(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
+function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])}
+function fmt(iso){const d=new Date(iso);return isNaN(d)?'':d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
+function msg(id,text,ok){const e=$(id);e.textContent=text;e.className='msg '+(ok?'ok':'err')}
+
+let worker=(new URLSearchParams(location.search).get('worker')||load('ndwp.worker')||'').replace(/\/$/,'');
+let pin='';
+$('workerUrl').value=worker;
+$('setBy').value=load('ndwp.setBy')||'';
+ACTIVITIES.forEach(a=>$('activity').insertAdjacentHTML('beforeend','<option value="'+esc(a)+'">'+(a==='ALL'?'ALL ACTIVITIES (whole park)':esc(a))+'</option>'));
+
+function choice(group){return $(group).querySelector('.on').dataset.v}
+['status','reason'].forEach(g=>$(g).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;$(g).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));if(g==='status')$('submit').classList.toggle('delayed',b.dataset.v==='delayed')}));
+
+async function api(path,body){
+  const r=await fetch(worker+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json','X-Staff-Pin':pin}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});
+  const d=await r.json().catch(()=>({ok:false,error:'HTTP '+r.status}));
+  if(!d.ok)throw new Error(d.error||'HTTP '+r.status);
+  return d;
+}
+
+function showCurrent(overrides){
+  const keys=ACTIVITIES.filter(a=>overrides[a]);
+  if(!keys.length){$('current').innerHTML='<p class="muted">Everything is open. Nothing is showing.</p>';return}
+  $('current').innerHTML=keys.map(a=>{const o=overrides[a];return'<div class="row"><div><b>'+(a==='ALL'?'ALL ACTIVITIES':esc(a))+'</b><span class="tag '+o.status+'">'+o.status.toUpperCase()+'</span>'+esc(REASONS[o.reason]||o.reason)+(o.note?' • '+esc(o.note):'')+(o.until?' • back '+fmt(o.until):'')+'<br><span class="muted">Set '+fmt(o.setAt)+(o.setBy?' by '+esc(o.setBy):'')+'</span></div><button class="reopen" data-a="'+esc(a)+'">Reopen</button></div>'}).join('');
+}
+
+async function refresh(){try{showCurrent((await api('/overrides')).overrides)}catch(e){$('current').innerHTML='<p class="msg err">Could not load: '+esc(e.message)+'</p>'}}
+
+$('signIn').addEventListener('click',async()=>{
+  worker=$('workerUrl').value.trim().replace(/\/$/,'');pin=$('pin').value;
+  if(!worker||!pin){msg('loginMsg','Enter the server address and PIN.');return}
+  try{await api('/overrides/check',{});store('ndwp.worker',worker);$('login').hidden=true;$('app').hidden=false;refresh();setInterval(refresh,15000)}
+  catch(e){msg('loginMsg',e.message)}
+});
+
+$('submit').addEventListener('click',async()=>{
+  const btn=$('submit');btn.disabled=true;
+  let until=null;
+  if($('until').value){const [h,m]=$('until').value.split(':').map(Number);const d=new Date();d.setHours(h,m,0,0);until=d.toISOString()}
+  store('ndwp.setBy',$('setBy').value.trim());
+  try{const d=await api('/overrides',{activity:$('activity').value,status:choice('status'),reason:choice('reason'),note:$('note').value.trim(),until,setBy:$('setBy').value.trim()});showCurrent(d.overrides);$('note').value='';$('until').value='';msg('formMsg','Showing on the kiosk now.',true)}
+  catch(e){msg('formMsg',e.message)}
+  btn.disabled=false;
+});
+
+$('current').addEventListener('click',async e=>{
+  const b=e.target.closest('.reopen');if(!b)return;b.disabled=true;
+  try{showCurrent((await api('/overrides',{activity:b.dataset.a,status:'open'})).overrides)}catch(err){b.disabled=false;alert(err.message)}
+});
+})();</script>
+</body></html>
