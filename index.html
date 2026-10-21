@@ -1,4 +1,240 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>North Devon Wake Park Kiosk</title></head><body>
-<div id="kiosk" style="font-family:Arial,sans-serif;background:#f4f5f6;color:#141414;min-height:650px;padding:18px;box-sizing:border-box"><style>#kiosk *{box-sizing:border-box}#kiosk .head{background:#64b6a2;color:white;border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:20px}.brand{font-size:22px;font-weight:800;flex:1}.date{font-size:13px}.next{background:#4b818b;border-radius:12px;padding:10px 16px;min-width:250px}.next small{display:block;font-weight:700;opacity:.8}.next strong{display:block;font-size:22px;margin:3px 0}.next span{font-size:12px}.clock{font-size:18px;font-weight:800;margin-left:10px}.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:12px}.col{background:white;border:1px solid #e3e4e6;border-radius:12px;padding:10px;overflow:hidden}.col h3{margin:0 0 3px;font-size:14px}.col p{margin:0 0 8px;color:#6b6f73;font-size:10px}.slot{border-radius:9px;padding:9px 10px;margin:6px 0;min-height:55px}.slot.current{background:#f7e8c9;color:#141414;outline:3px solid #d8991f}.slot.available{background:#64b6a2;color:white}.slot.full{background:#4b818b;color:white}.slot.empty{background:#edeef0;color:#6b6f73}.time{font-size:12px;font-weight:800}.detail{font-size:10px;margin-top:3px;display:flex;justify-content:space-between}.current .detail{color:#6b6f73}.legend{font-size:10px;color:#6b6f73;margin-top:8px}@media(max-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}.head{flex-wrap:wrap}.next{min-width:0;flex:1}}</style><div class="head"><div class="brand">NORTH DEVON WAKE PARK<div class="date">TODAY'S SESSIONS • LIVE KIOSK APP</div></div><div class="next"><small>NEXT SESSION</small><strong id="nextName">Connecting to WakeSys…</strong><span id="nextSpaces">Loading live availability</span><span class="clock" id="clock">--:--:--</span></div></div><div class="grid" id="grid"></div><div class="legend">⭐ Current session • 🟢 Available • 🟠 Nearly full • 🔵 Full • ⚪ Empty • <span id="connectionStatus">Connecting to WakeSys…</span></div>
-<script>(function(){const root=document.getElementById('kiosk');const API='https://northdevonwakepark.wakesys.com/api/events.php';const DISPLAY=['FULL SIZE CABLE','TOP LAKE','AQUA PARK','JUNIOR AQUA PARK','PADDLEBOARDING','SAUNA & DIP'];let liveEvents=[];let callbackNo=0;function setStatus(t,ok){const e=root.querySelector('#connectionStatus');e.textContent=t;e.style.fontWeight='700';e.style.color=ok?'#4b818b':'#b05a3c'}function loadWakeSys(){return new Promise((resolve,reject)=>{const callback='displayEventList_'+Date.now()+'_'+(++callbackNo),script=document.createElement('script');let done=false;const timer=setTimeout(()=>{if(!done){done=true;cleanup();reject(new Error('WakeSys timeout'))}},10000);function cleanup(){clearTimeout(timer);delete window[callback];script.remove()}window[callback]=data=>{if(done)return;done=true;cleanup();const events=Array.isArray(data)?data:(data&&Array.isArray(data.events)?data.events:null);events?resolve(events):reject(new Error('Unexpected WakeSys response'))};script.onerror=()=>{if(!done){done=true;cleanup();reject(new Error('WakeSys network request failed'))}};const now=new Date(),stop=new Date(now.getTime()+86400000);script.src=API+'?callback='+encodeURIComponent(callback)+'&start='+now.toISOString().slice(0,10)+'&stop='+stop.toISOString().slice(0,10)+'&_='+Date.now();document.head.appendChild(script)})}function pick(o,keys){for(const k of keys)if(o&&o[k]!=null&&String(o[k]).trim()!=='')return o[k];return ''}function num(o,keys){for(const k of keys){const n=Number(o&&o[k]);if(Number.isFinite(n))return n}return null}function dt(v){if(!v)return null;const d=new Date(v);return isNaN(d)?null:d}function activity(e){const s=(String(e.resource||e.resourceName||'')+' '+String(e.title||e.name||e.event||e.description||'')).toLowerCase();if(/top\s*lake|ringo/.test(s))return'TOP LAKE';if(/junior|jr.*aqua/.test(s))return'JUNIOR AQUA PARK';if(/aqua\s*park|aquapark/.test(s))return'AQUA PARK';if(/paddle|supstacle|paddleboard/.test(s))return'PADDLEBOARDING';if(/sauna|dip/.test(s))return'SAUNA & DIP';if(/cable|wakeboard|ladies|slow speed|standard speed/.test(s))return'FULL SIZE CABLE';return null}function fmt(d){return d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}function render(){const groups={};liveEvents.forEach(e=>{const start=dt(pick(e,['start','startTime','start_date','datetime','date']));if(!start)return;const end=dt(pick(e,['end','endTime','end_date','stop','finish'])),name=activity(e);if(!name)return;const cap=num(e,['capacity','max','maxCapacity','limit','places','spaces']),booked=num(e,['booked','bookings','taken','attendees','quantity']);(groups[name]??=[]).push({start,end,title:pick(e,['title','name','event','eventName','description'])||'Session',cap,booked})});const now=new Date(),grid=root.querySelector('#grid');grid.innerHTML='';let next=null;DISPLAY.forEach(name=>{const col=document.createElement('section');col.className='col';col.innerHTML='<h3>'+name+'</h3><p>LIVE • rolling sessions</p>';const events=(groups[name]||[]).sort((a,b)=>a.start-b.start);let idx=events.findIndex(e=>e.end?e.end>now:e.start>now);if(idx<0)idx=events.findIndex(e=>e.start>now);if(idx<0)idx=events.length;const visible=events.slice(idx,idx+5);if(events[idx]&&(!next||events[idx].start<next.start))next={...events[idx],name};if(!visible.length)col.insertAdjacentHTML('beforeend','<div class="slot empty"><div class="time">No more sessions today</div></div>');else visible.forEach((e,i)=>{const left=e.cap!=null&&e.booked!=null?Math.max(0,e.cap-e.booked):null,state=left==null?'empty':left<=0?'full':'available',status=left==null?'LIVE':left<=0?'FULL':left+' LEFT',booked=e.cap!=null&&e.booked!=null?e.booked+' / '+e.cap+' booked':'Live availability',div=document.createElement('div');div.className='slot '+state+(i===0?' current':'');div.innerHTML='<div class="time">'+fmt(e.start)+(e.end?' – '+fmt(e.end):'')+'</div><div class="detail"><span>'+e.title+'</span><strong>'+status+'</strong></div><div style="font-size:9px;margin-top:2px">'+booked+'</div>';col.appendChild(div)});grid.appendChild(col)});if(next){root.querySelector('#nextName').textContent=next.name+' • '+fmt(next.start);root.querySelector('#nextSpaces').textContent=next.cap!=null&&next.booked!=null?Math.max(0,next.cap-next.booked)+' spaces available':'Live availability'}}function clock(){root.querySelector('#clock').textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}async function refresh(){setStatus('Connecting to WakeSys…',false);try{liveEvents=await loadWakeSys();setStatus('LIVE • '+liveEvents.length+' events received • '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),true);render()}catch(e){setStatus('ERROR • '+e.message,false)}}clock();refresh();setInterval(clock,1000);setInterval(refresh,60000);setInterval(render,15000)})();</script></div></body></html>
+<div id="kiosk" style="font-family:Arial,sans-serif;background:#f4f5f6;color:#141414;min-height:650px;padding:18px;box-sizing:border-box"><style>#kiosk *{box-sizing:border-box}#kiosk .head{background:#64b6a2;color:white;border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:20px}.brand{font-size:22px;font-weight:800;flex:1}.date{font-size:13px}.next{background:#4b818b;border-radius:12px;padding:10px 16px;min-width:250px}.next small{display:block;font-weight:700;opacity:.8}.next strong{display:block;font-size:22px;margin:3px 0}.next span{font-size:12px}.clock{font-size:18px;font-weight:800;margin-left:10px}.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:12px}.col{background:white;border:1px solid #e3e4e6;border-radius:12px;padding:10px;overflow:hidden}.col h3{margin:0 0 3px;font-size:14px}.col p{margin:0 0 8px;color:#6b6f73;font-size:10px}.slot{border-radius:9px;padding:9px 10px;margin:6px 0;min-height:55px}.slot.current{background:#f7e8c9;color:#141414;outline:3px solid #d8991f}.slot.available{background:#64b6a2;color:white}.slot.nearly{background:#e08a3c;color:white}.slot.full{background:#4b818b;color:white}.slot.empty{background:#edeef0;color:#6b6f73}.time{font-size:12px;font-weight:800}.detail{font-size:10px;margin-top:3px;display:flex;justify-content:space-between;gap:6px}.current .detail{color:#6b6f73}.legend{font-size:10px;color:#6b6f73;margin-top:8px}@media(max-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}.head{flex-wrap:wrap}.next{min-width:0;flex:1}}</style><div class="head"><div class="brand">NORTH DEVON WAKE PARK<div class="date">TODAY'S SESSIONS • LIVE KIOSK APP</div></div><div class="next"><small>NEXT SESSION</small><strong id="nextName">Connecting to WakeSys…</strong><span id="nextSpaces">Loading live availability</span><span class="clock" id="clock">--:--:--</span></div></div><div class="grid" id="grid"></div><div class="legend">⭐ Current session • 🟢 Available • 🟠 Nearly full • 🔵 Full • ⚪ Empty • <span id="connectionStatus">Connecting to WakeSys…</span></div>
+<script>
+(function () {
+  const root = document.getElementById('kiosk');
+
+  // The Cloudflare Worker in worker/ proxies WakeSys and keeps a last good copy.
+  // Set this to the deployed worker URL. It can also be overridden with ?api=<url>.
+  const WORKER_URL = 'https://ndwp-kiosk-bridge.northdevonwakepark.workers.dev/';
+  // Used only if the worker itself can't be reached.
+  const WAKESYS_JSONP = 'https://northdevonwakepark.wakesys.com/api/events.php';
+
+  const DISPLAY = ['FULL SIZE CABLE', 'TOP LAKE', 'AQUA PARK', 'JUNIOR AQUA PARK', 'PADDLEBOARDING', 'SAUNA & DIP'];
+  const CACHE_KEY = 'ndwp-kiosk:last-good';
+  // Spaces left at or below this share of capacity (or 2 spaces) counts as nearly full.
+  const NEARLY_FULL_SHARE = 0.25;
+  const NEARLY_FULL_MIN = 2;
+
+  const apiOverride = new URLSearchParams(location.search).get('api');
+  const workerUrl = apiOverride || WORKER_URL;
+
+  let liveEvents = [];
+  let lastGoodAt = null;
+  let callbackNo = 0;
+
+  function esc(v) {
+    return String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function setStatus(t, ok) {
+    const e = root.querySelector('#connectionStatus');
+    e.textContent = t;
+    e.style.fontWeight = '700';
+    e.style.color = ok ? '#4b818b' : '#b05a3c';
+  }
+
+  function hms(d) {
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  // Local calendar date, so the request doesn't ask for yesterday just after midnight in BST.
+  function localDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function range() {
+    const now = new Date();
+    return { start: localDate(now), stop: localDate(new Date(now.getTime() + 86400000)) };
+  }
+
+  function extractEvents(data) {
+    return Array.isArray(data) ? data : (data && Array.isArray(data.events) ? data.events : null);
+  }
+
+  async function loadWorker() {
+    const { start, stop } = range();
+    const url = new URL(workerUrl);
+    url.searchParams.set('start', start);
+    url.searchParams.set('stop', stop);
+    url.searchParams.set('_', Date.now());
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.ok === false) throw new Error((data && data.error) || 'Worker HTTP ' + res.status);
+      const events = extractEvents(data);
+      if (!events) throw new Error('Unexpected worker response');
+      return { events, fetchedAt: data.fetchedAt ? new Date(data.fetchedAt) : new Date(), stale: !!data.stale };
+    } catch (e) {
+      throw new Error(e.name === 'AbortError' ? 'Worker timeout' : e.message);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function loadWakeSysDirect() {
+    return new Promise((resolve, reject) => {
+      const callback = 'displayEventList_' + Date.now() + '_' + (++callbackNo), script = document.createElement('script');
+      let done = false;
+      const timer = setTimeout(() => { if (!done) { done = true; cleanup(); reject(new Error('WakeSys timeout')) } }, 10000);
+      function cleanup() { clearTimeout(timer); delete window[callback]; script.remove() }
+      window[callback] = data => {
+        if (done) return;
+        done = true;
+        cleanup();
+        const events = extractEvents(data);
+        events ? resolve({ events, fetchedAt: new Date(), stale: false }) : reject(new Error('Unexpected WakeSys response'));
+      };
+      script.onerror = () => { if (!done) { done = true; cleanup(); reject(new Error('WakeSys network request failed')) } };
+      const { start, stop } = range();
+      script.src = WAKESYS_JSONP + '?callback=' + encodeURIComponent(callback) + '&start=' + start + '&stop=' + stop + '&_=' + Date.now();
+      document.head.appendChild(script);
+    });
+  }
+
+  async function load() {
+    try {
+      return await loadWorker();
+    } catch (workerErr) {
+      try {
+        return await loadWakeSysDirect();
+      } catch (_) {
+        throw workerErr;
+      }
+    }
+  }
+
+  function saveLastGood(events, fetchedAt) {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ day: localDate(new Date()), fetchedAt: fetchedAt.toISOString(), events })) } catch (_) {}
+  }
+
+  // Only today's copy is useful; yesterday's sessions would be wrong.
+  function readLastGood() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (!saved || saved.day !== localDate(new Date()) || !Array.isArray(saved.events)) return null;
+      return { events: saved.events, fetchedAt: new Date(saved.fetchedAt) };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function pick(o, keys) { for (const k of keys) if (o && o[k] != null && String(o[k]).trim() !== '') return o[k]; return '' }
+  function num(o, keys) { for (const k of keys) { if (!o || o[k] == null || String(o[k]).trim() === '') continue; const n = Number(o[k]); if (Number.isFinite(n)) return n } return null }
+  function dt(v) { if (!v) return null; const d = new Date(v); return isNaN(d) ? null : d }
+
+  function activity(e) {
+    const s = (String(e.resource || e.resourceName || '') + ' ' + String(e.title || e.name || e.event || e.description || '')).toLowerCase();
+    if (/top\s*lake|ringo/.test(s)) return 'TOP LAKE';
+    if (/junior|jr.*aqua/.test(s)) return 'JUNIOR AQUA PARK';
+    if (/aqua\s*park|aquapark/.test(s)) return 'AQUA PARK';
+    if (/paddle|supstacle|paddleboard/.test(s)) return 'PADDLEBOARDING';
+    if (/sauna|dip/.test(s)) return 'SAUNA & DIP';
+    if (/cable|wakeboard|ladies|slow speed|standard speed/.test(s)) return 'FULL SIZE CABLE';
+    return null;
+  }
+
+  function fmt(d) { return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }
+
+  function availability(e) {
+    if (e.cap == null || e.booked == null) return { state: 'empty', status: 'LIVE', left: null };
+    const left = Math.max(0, e.cap - e.booked);
+    if (left <= 0) return { state: 'full', status: 'FULL', left };
+    if (left <= Math.max(NEARLY_FULL_MIN, Math.floor(e.cap * NEARLY_FULL_SHARE))) return { state: 'nearly', status: left + ' LEFT', left };
+    return { state: 'available', status: left + ' LEFT', left };
+  }
+
+  function render() {
+    const groups = {};
+    liveEvents.forEach(e => {
+      const start = dt(pick(e, ['start', 'startTime', 'start_date', 'datetime', 'date']));
+      if (!start) return;
+      const end = dt(pick(e, ['end', 'endTime', 'end_date', 'stop', 'finish'])), name = activity(e);
+      if (!name) return;
+      const cap = num(e, ['capacity', 'max', 'maxCapacity', 'limit', 'places', 'spaces']), booked = num(e, ['booked', 'bookings', 'taken', 'attendees', 'quantity']);
+      (groups[name] ??= []).push({ start, end, title: pick(e, ['title', 'name', 'event', 'eventName', 'description']) || 'Session', cap, booked });
+    });
+
+    const now = new Date(), grid = root.querySelector('#grid');
+    grid.innerHTML = '';
+    let next = null;
+
+    DISPLAY.forEach(name => {
+      const col = document.createElement('section');
+      col.className = 'col';
+      col.innerHTML = '<h3>' + esc(name) + '</h3><p>LIVE • rolling sessions</p>';
+      const events = (groups[name] || []).sort((a, b) => a.start - b.start);
+      let idx = events.findIndex(e => e.end ? e.end > now : e.start > now);
+      if (idx < 0) idx = events.length;
+      const visible = events.slice(idx, idx + 5);
+
+      // The next session is the first one that hasn't started yet.
+      const upcoming = events.find(e => e.start > now);
+      if (upcoming && (!next || upcoming.start < next.start)) next = { ...upcoming, name };
+
+      if (!visible.length) col.insertAdjacentHTML('beforeend', '<div class="slot empty"><div class="time">No more sessions today</div></div>');
+      else visible.forEach(e => {
+        const a = availability(e),
+          booked = e.cap != null && e.booked != null ? e.booked + ' / ' + e.cap + ' booked' : 'Live availability',
+          inProgress = e.start <= now && (!e.end || e.end > now),
+          div = document.createElement('div');
+        div.className = 'slot ' + a.state + (inProgress ? ' current' : '');
+        div.innerHTML = '<div class="time">' + (inProgress ? '⭐ ' : '') + fmt(e.start) + (e.end ? ' – ' + fmt(e.end) : '') + '</div><div class="detail"><span>' + esc(e.title) + '</span><strong>' + esc(a.status) + '</strong></div><div style="font-size:9px;margin-top:2px">' + esc(booked) + '</div>';
+        col.appendChild(div);
+      });
+      grid.appendChild(col);
+    });
+
+    if (next) {
+      root.querySelector('#nextName').textContent = next.name + ' • ' + fmt(next.start);
+      const a = availability(next);
+      root.querySelector('#nextSpaces').textContent = a.left == null ? 'Live availability' : a.left <= 0 ? 'Fully booked' : a.left + ' spaces available';
+    } else if (liveEvents.length) {
+      root.querySelector('#nextName').textContent = 'No more sessions today';
+      root.querySelector('#nextSpaces').textContent = '';
+    }
+  }
+
+  function clock() { root.querySelector('#clock').textContent = hms(new Date()) }
+
+  function showCached(reason) {
+    if (!lastGoodAt) {
+      const saved = readLastGood();
+      if (saved) { liveEvents = saved.events; lastGoodAt = saved.fetchedAt }
+    }
+    if (lastGoodAt) {
+      setStatus('OFFLINE • showing data from ' + fmt(lastGoodAt) + ' • ' + reason, false);
+      render();
+    } else {
+      setStatus('ERROR • ' + reason, false);
+    }
+  }
+
+  async function refresh() {
+    try {
+      const result = await load();
+      liveEvents = result.events;
+      lastGoodAt = result.fetchedAt;
+      saveLastGood(result.events, result.fetchedAt);
+      if (result.stale) setStatus('DELAYED • WakeSys unavailable, showing data from ' + fmt(result.fetchedAt), false);
+      else setStatus('LIVE • ' + liveEvents.length + ' events received • ' + hms(new Date()), true);
+      render();
+    } catch (e) {
+      showCached(e.message);
+    }
+  }
+
+  // Draw the last good copy straight away so a reload during an outage isn't blank.
+  const saved = readLastGood();
+  if (saved) { liveEvents = saved.events; lastGoodAt = saved.fetchedAt; render() }
+
+  clock();
+  refresh();
+  setInterval(clock, 1000);
+  setInterval(refresh, 60000);
+  setInterval(render, 15000);
+})();
+</script></div></body></html>

@@ -1,0 +1,12 @@
+name = "ndwp-kiosk-bridge"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Optional: a KV namespace makes the "last good data" copy survive across
+# Cloudflare data centres and cache evictions. Without it the worker falls
+# back to the per-location Cache API, which still covers short outages.
+# Create one with `npx wrangler kv namespace create LAST_GOOD` and paste the id:
+#
+# [[kv_namespaces]]
+# binding = "LAST_GOOD"
+# id = "<namespace id>"
